@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alquileres en CABA: precio e ingresos</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg:#f4f4f1; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e8e7e1; --axis:#c3c2b7; --border:rgba(11,11,11,.09);
+  --band1:rgba(11,11,11,.13); --band2:rgba(11,11,11,.05); --band3:rgba(11,11,11,.27);
+  --shadow:0 1px 2px rgba(11,11,11,.04), 0 6px 20px rgba(11,11,11,.04);
+  --s1:#0072b2; --s2:#e69f00; --s3:#009e73; --s4:#cc79a7;   /* Okabe-Ito + patron de trazo por serie */
+  --up:#9b2c2c; --down:#1b6b4a;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+html, body { height:100%; }
+body { display:flex; flex-direction:column; overflow:hidden; }
+.deck { flex:1; min-height:0; position:relative; }
+.slide { display:none; position:absolute; inset:0; overflow:auto; padding:26px 44px 16px; }
+.slide.active { display:flex; flex-direction:column; animation:aparece .25s ease; }
+@keyframes aparece { from { opacity:0; transform:translateX(14px); } to { opacity:1; transform:none; } }
+.slide > h2 { font-size:25px; line-height:1.2; margin:0 0 4px; letter-spacing:-.01em; }
+.slide > .sub { color:var(--ink2); font-size:14px; margin:0 0 10px; max-width:110ch; }
+.slide .body { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; }
+.slide.portada { justify-content:center; max-width:1000px; margin:0 auto; width:100%; }
+.slide.portada h1 { font-size:46px; margin:6px 0 14px; }
+.slide.portada .lead { font-size:18px; }
+.slide.portada .equipo { margin-top:34px; color:var(--muted); font-size:13px; }
+.mapa { flex:1; min-height:300px; width:100%; border:1px solid var(--border); border-radius:12px; background:var(--surface); box-shadow:var(--shadow); }
+img.mapa { object-fit:contain; min-height:0; max-height:100%; }
+.fuente { color:var(--muted); font-size:11.5px; margin:6px 0 0; }
+nav.nav { display:flex; align-items:center; justify-content:center; gap:14px; padding:8px 16px 12px; border-top:1px solid var(--border); background:var(--surface); }
+nav.nav button.arrow { border:1px solid var(--border); background:var(--surface); color:var(--ink); width:34px; height:34px; border-radius:50%; font-size:16px; cursor:pointer; }
+nav.nav button.arrow:hover:not(:disabled) { background:var(--band2); }
+nav.nav button.arrow:disabled { opacity:.35; cursor:default; }
+.dots { display:flex; gap:8px; }
+.dots button { width:11px; height:11px; border-radius:50%; border:1.5px solid var(--ink2); background:transparent; padding:0; cursor:pointer; }
+.dots button[aria-current="true"] { background:var(--ink); border-color:var(--ink); }
+.count { font-size:12.5px; color:var(--muted); min-width:44px; text-align:center; font-variant-numeric:tabular-nums; }
+.eyebrow { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600; margin:0 0 6px; }
+h1 { font-size:28px; line-height:1.15; margin:0 0 8px; letter-spacing:-.01em; }
+.lead { color:var(--ink2); margin:0; max-width:80ch; font-size:15px; }
+.row { display:flex; flex-wrap:wrap; gap:8px 20px; align-items:center; justify-content:space-between; margin-bottom:4px; }
+.legend { display:flex; flex-wrap:wrap; gap:4px 18px; font-size:12.5px; color:var(--ink2); }
+.legend span { display:inline-flex; align-items:center; gap:6px; }
+.legend svg { width:26px; height:6px; }
+.seg { display:inline-flex; border:1px solid var(--border); border-radius:9px; overflow:hidden; background:var(--surface); }
+.seg button { border:0; background:transparent; color:var(--ink2); padding:5px 12px; font:inherit; font-size:13px; cursor:pointer; }
+.seg button:hover { background:var(--band2); }
+.seg button[aria-pressed="true"] { color:var(--ink); font-weight:600; background:var(--band2); box-shadow:inset 0 -2px 0 var(--ink); }
+button:focus-visible, svg:focus-visible { outline:2px solid var(--s1); outline-offset:2px; }
+.plot { position:relative; width:min(100%, calc((100vh - var(--resto)) * var(--ar))); margin:0 auto; }
+.plot svg { display:block; width:100%; height:auto; overflow:visible; }
+.tip { position:absolute; pointer-events:none; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px 11px; font-size:12.5px; box-shadow:0 6px 18px rgba(0,0,0,.16); min-width:190px; z-index:4; }
+.tip .th { color:var(--ink2); margin-bottom:4px; font-size:12px; }
+.tip .tr { display:flex; gap:12px; justify-content:space-between; }
+.tip .tr b { font-variant-numeric:tabular-nums; }
+.tip.hito { max-width:340px; min-width:0; }
+.periodos { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:10px; margin:8px 0 0; }
+.per { border:1px solid var(--border); border-radius:10px; padding:8px 12px; font-size:12.5px; color:var(--ink2); background:var(--surface); }
+.per .pt { font-weight:650; color:var(--ink); margin-bottom:2px; }
+.per .pv { font-size:20px; font-weight:700; line-height:1.2; font-variant-numeric:tabular-nums; }
+.per .pv.up { color:var(--up); } .per .pv.down { color:var(--down); }
+.per .pd { color:var(--muted); font-size:12px; }
+.hitos { margin:6px 0 0; padding:0; list-style:none; display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px 18px; }
+.hitos li { display:flex; gap:12px; align-items:flex-start; font-size:15px; color:var(--ink2); }
+.ltr { flex:none; display:inline-grid; place-items:center; width:26px; height:26px; border-radius:50%; border:1.5px solid var(--ink); color:var(--ink); font-size:11px; font-weight:700; }
+.nota { color:var(--muted); font-size:12px; margin:8px 0 0; max-width:110ch; }
+footer { margin-top:26px; color:var(--muted); font-size:12px; }
+@media (max-width: 760px) { .hitos { grid-template-columns:1fr; } .slide { padding:18px 16px 10px; } .slide.portada h1 { font-size:32px; } .slide > h2 { font-size:20px; } }
+@media print { :root { --bg:#fff; } body { display:block; overflow:visible; } .deck { position:static; } .slide { display:flex !important; position:static; break-after:page; animation:none; } .seg, nav.nav { display:none; } .plot { --resto:300px; } }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <section class="slide portada" aria-label="Portada">
+    <p class="eyebrow">Clínica de Datos · UTDT</p>
+    <h1>Alquileres en CABA: precio e ingresos</h1>
+    <p class="lead">Cómo cambió el precio de alquilar un 2 ambientes desde 2015, en pesos de hoy, y cómo se compara con lo que ganan las personas y las familias.</p>
+    <p class="equipo">Equipo: Florencia Ameri, Agustin Barclay, Nicolas Martin, Leonardo Pennesi, Celina Santellán.<br>Usá las flechas del teclado o los botones de abajo para avanzar.</p>
+  </section>
+
+  <section class="slide" aria-label="Hitos">
+    <h2>Seis hitos normativos y estructurales</h2>
+    <p class="sub">Cronología de los cambios que marcaron el mercado de alquileres de CABA. Los períodos sombreados de los gráficos salen de estas fechas.</p>
+    <div class="body" style="justify-content:flex-start; padding-top:18px"><ol class="hitos" id="hitos-ol"></ol></div>
+  </section>
+
+  <section class="slide" aria-labelledby="t1">
+    <h2 id="t1">Evolución del alquiler de un 2 ambientes y los hitos</h2>
+    <p class="sub">Zonaprop, 2 ambientes de 50 m², promedio general de CABA. Pesos constantes del <span class="ref"></span> (IPCBA general). Las zonas grises marcan los períodos regulatorios, entre ellos toda la vigencia de la Ley de Alquileres (de su sanción a su derogación); debajo, la variación mensual.</p>
+    <div class="body">
+      <div class="plot" id="p1" style="--ar:1.923; --resto:330px"></div>
+      <div class="periodos" id="periodos"></div>
+    </div>
+  </section>
+
+  <section class="slide" aria-labelledby="t2">
+    <h2 id="t2">El alquiler frente a los ingresos</h2>
+    <p class="sub">El mismo precio del alquiler, junto al ingreso individual medio de los perceptores y al ingreso total familiar (ITF) medio. Las tres series, en pesos constantes del <span class="ref"></span>. Datos trimestrales.</p>
+    <div class="body">
+      <div class="legend" id="leg2"></div>
+      <div class="plot" id="p2" style="--ar:2.5; --resto:240px"></div>
+      <p class="nota" id="nota2"></p>
+      <p class="fuente">Fuentes: Zonaprop (alquiler), IDECBA (IPCBA, ingreso individual de perceptores, ITF).</p>
+    </div>
+  </section>
+
+  <section class="slide" aria-labelledby="tz">
+    <h2 id="tz">Las tres zonas: Norte, Centro y Sur</h2>
+    <p class="sub">Así se agrupan los barrios para comparar el precio del alquiler con el ingreso total familiar (ITF) de cada zona.</p>
+    <div class="body">
+      <img class="mapa" src="../Mapas/mapa_zonas.png" alt="Mapa de CABA con las zonas Norte, Centro y Sur delimitadas">
+      <p class="fuente">Zona de cada barrio según <code>Bases limpias/barrio_zona.csv</code>. Mapa: <code>scripts/14_mapa_zonas.R</code>.</p>
+    </div>
+  </section>
+
+  <section class="slide" aria-labelledby="t3">
+    <h2 id="t3">Alquiler de un 2 ambientes como % del ingreso total familiar</h2>
+    <p class="sub">Precio promedio del trimestre (Zonaprop) sobre el ITF medio. Cada zona usa el promedio de los precios de sus barrios (ponderado por m² ofertados) contra el ITF de esa misma zona. Pesos corrientes del mismo trimestre.</p>
+    <div class="body">
+      <div class="row">
+        <div class="legend" id="leg3"></div>
+        <span class="seg" id="f-precio"><button data-v="zona" aria-pressed="true">Precio de cada zona</button><button data-v="caba" aria-pressed="false">Precio de toda CABA</button></span>
+      </div>
+      <div class="plot" id="p3" style="--ar:2.5; --resto:250px"></div>
+      <p class="nota" id="nota3"></p>
+      <p class="fuente">Fuentes: Zonaprop (precio por barrio y total), IDECBA (ITF por zona, m² ofertados). Zonas según <code>Bases limpias/barrio_zona.csv</code>.</p>
+    </div>
+  </section>
+
+  <section class="slide" aria-labelledby="t4">
+    <h2 id="t4">Mapa de calor: avisos estimados por barrio y mes</h2>
+    <p class="sub">Cada celda es un barrio en un mes; el color es la cantidad estimada de avisos de alquiler de 2 ambientes (los barrios van de mayor a menor oferta promedio). Se estima repartiendo el total de avisos de Zonaprop con la distribución de la oferta de IDECBA por barrio.</p>
+    <div class="body">
+      <div class="plot" id="p4" style="--ar:3.1; --resto:330px"></div>
+      <div class="legend" id="leg4" style="margin-top:8px"></div>
+      <p class="nota" id="nota4"></p>
+      <p class="fuente">Fuentes: Zonaprop (total de avisos), IDECBA (m² ofertados por barrio; 43 m² por departamento). Cálculo en <code>scripts/10_oferta_barrio.R</code>.</p>
+    </div>
+  </section>
+
+
+  <section class="slide" aria-labelledby="t5">
+    <h2 id="t5">Evolución del precio de alquiler por barrio</h2>
+    <p class="sub">Zonaprop, 2 ambientes de 50 m², en pesos constantes del <span class="ref"></span>. Movés el deslizador (o ▶) para recorrer los meses y pasás el mouse por un barrio para ver su precio y su variación interanual real. El rayado indica que ese mes no hay dato confiable.</p>
+    <div class="body">
+      <iframe class="mapa" data-src="../Mapas/mapa_precios_barrio.html" title="Mapa del precio de alquiler por barrio, con deslizador de meses"></iframe>
+      <p class="fuente">Fuentes: Zonaprop (precio), IDECBA (IPCBA), BA Data (polígonos de barrios). Mapa generado por <code>scripts/06_mapa_barrios.R</code>.</p>
+    </div>
+  </section>
+
+  <section class="slide" aria-labelledby="t5b">
+    <h2 id="t5b">Variación del precio de alquiler por barrio, 2016 a 2026</h2>
+    <p class="sub">Cambio porcentual real (pesos constantes del <span class="ref"></span>) entre el precio promedio de 2016 y el de enero–septiembre de 2026. Violeta oscuro = mayor aumento; amarillo = mayor caída. Pasá el mouse por un barrio para ver sus dos promedios.</p>
+    <div class="body">
+      <iframe class="mapa" data-src="../Mapas/mapa_variacion_precio.html" title="Mapa de la variación real del precio de alquiler por barrio entre 2016 y 2026"></iframe>
+      <p class="fuente">Promedios con al menos 6 meses de dato en cada período. Rayado: sin datos suficientes (Villa Gral. Mitre, Villa Real, Villa Riachuelo y Villa Soldati). Mapa: <code>scripts/13_mapa_variacion.R</code>.</p>
+    </div>
+  </section>
+
+  <section class="slide" aria-labelledby="t7">
+    <h2 id="t7">Mapa interactivo: precio, subte y espacios verdes</h2>
+    <p class="sub">Elegí el nivel (comuna o barrio) y la variable (precio, estaciones de subte, espacios verdes o distancia al subte). Se pueden sumar las capas de estaciones y parques, y recorrer los meses con el deslizador.</p>
+    <div class="body">
+      <iframe class="mapa" data-src="../Mapas/mapa_interactivo.html" title="Mapa interactivo de CABA por comuna o barrio"></iframe>
+      <p class="fuente">Fuentes: Zonaprop, IDECBA, BA Data. Mapa generado por <code>scripts/09_mapa_interactivo.R</code>.</p>
+    </div>
+  </section>
+</div>
+<nav class="nav" aria-label="Navegación de slides">
+  <button class="arrow" id="prev" aria-label="Slide anterior">◀</button>
+  <div class="dots" id="dots"></div>
+  <span class="count" id="count"></span>
+  <button class="arrow" id="next" aria-label="Slide siguiente">▶</button>
+</nav>
+
+<script>
+const DATA = {"calor":{"months":["2015-01","2015-02","2015-03","2015-04","2015-05","2015-06","2015-07","2015-08","2015-09","2015-10","2015-11","2015-12","2016-01","2016-02","2016-03","2016-04","2016-05","2016-06","2016-07","2016-08","2016-09","2016-10","2016-11","2016-12","2017-01","2017-02","2017-03","2017-04","2017-05","2017-06","2017-07","2017-08","2017-09","2017-10","2017-11","2017-12","2018-01","2018-02","2018-03","2018-04","2018-05","2018-06","2018-07","2018-08","2018-09","2018-10","2018-11","2018-12","2019-01","2019-02","2019-03","2019-04","2019-05","2019-06","2019-07","2019-08","2019-09","2019-10","2019-11","2019-12","2020-01","2020-02","2020-03","2020-04","2020-05","2020-06","2020-07","2020-08","2020-09","2020-10","2020-11","2020-12","2021-01","2021-02","2021-03","2021-04","2021-05","2021-06","2021-07","2021-08","2021-09","2021-10","2021-11","2021-12","2022-01","2022-02","2022-03","2022-04","2022-05","2022-06","2022-07","2022-08","2022-09","2022-10","2022-11","2022-12","2023-01","2023-02","2023-03","2023-04","2023-05","2023-06","2023-07","2023-08","2023-09","2023-10","2023-11","2023-12","2024-01","2024-02","2024-03","2024-04","2024-05","2024-06","2024-07","2024-08","2024-09","2024-10","2024-11","2024-12","2025-01","2025-02","2025-03","2025-04","2025-05","2025-06","2025-07","2025-08","2025-09","2025-10","2025-11","2025-12","2026-01","2026-02","2026-03","2026-04","2026-05","2026-06","2026-07","2026-08","2026-09"],"proy_desde":"2025-09","orden":["Palermo","Caballito","Puerto Madero","San Telmo","Agronomia"],"vals":{"Palermo":[1000.4,929,925.9,943.1,1012.6,1100.2,1168.8,1188.2,1102.2,1080.6,1097.8,1106.6,1183.8,1252.4,1204.3,1167.9,1218.6,1266.7,1334.2,1286.1,1481,1573.5,1682.6,1547.4,1396.1,1303.6,1149.1,1125.8,1164.7,1171.5,1317.2,1413.8,1305,1196.8,1166.3,1136.9,1064.7,1104.6,1082,1176.8,1121.4,1220.4,1253.6,1428.6,1388.1,1379.6,1383.4,1412.2,1486.8,1373.3,1300.3,1413,1524.9,1734.2,1706.3,1774.8,1839.1,1841.1,1828.7,1758.8,1723,1402.6,1250.3,949.1,1307.8,1929.4,2052,2013,1837,1707.4,1796.2,1994.6,2048.4,1872.1,1660.7,1622.6,1782.7,1791.7,1728.2,1678,1644.7,1512.5,1318.2,1132.7,1015.6,732.2,590.8,570.1,647,702.3,676.1,716.9,746.3,769.5,714.4,657.5,584.3,552,644.1,641.3,613,595.3,706.4,683.2,701.9,952.4,893.9,998.1,1047.8,1273.6,1447.7,1892,2341.3,2594.4,2680.8,2655.6,2676.1,2663.3,2838.3,2898.3,2783.3,2494.9,2283.9,2258.3,2407.4,2564.1,2674.5,2504.8,2486,2362.5,2208.2,2100.2,1826.5,1714.6,1691.8,1955.2,2218.9,2358.6,2420.8,2490.9,2543.1],"Caballito":[595.1,634.9,747.4,800.1,814.5,780.5,747.4,679.3,657.3,642.4,752.6,628.6,528.8,498.9,504.3,648.8,728.9,782.1,732.5,809.7,735,788,759.6,762.8,704.6,611.2,563.2,566.6,625.2,716.3,798.7,788.2,655.1,517.2,480.6,436.1,426,481.4,558.1,636.7,678.1,630.2,599.4,548.6,566.1,738.4,925.1,931.5,848,646.5,680.1,773,871.5,913.2,867.3,862.2,987.3,1076.4,1141.3,1127.7,1019,911.8,775.8,614.3,565.4,652.1,623.8,557.1,524.2,610.2,659,730.8,744.7,758.2,695.3,656.8,769.1,736.5,706.5,647.6,774,843.6,843.8,794.7,697.8,657.9,587.2,631.8,578.8,586.5,526,522.9,503.7,520.8,574.3,588.4,567.3,484.3,429.5,413.8,437.9,541.1,509.6,440.8,364.4,356.9,346.6,339.6,621.7,960,1169.3,1345.4,1359.8,1402.7,1332.2,1268.9,1187.1,1173.2,1174.7,1216.3,1121.8,1172.8,1229.8,1357.6,1256.3,1276.3,1242.8,1282.9,1288.3,1241.2,1322.4,1266.3,1226.3,1106.4,1151,1280.4,1444.4,1609.4,1617.7,1557,1417.3],"Puerto Madero":[113.7,118.4,86.8,110.8,230.1,360.1,440.1,394.2,357,237.8,270.2,214.1,262.3,175.1,156.7,152.7,164.9,202.8,217.5,268.7,218.3,166.5,192,204.9,235.3,176.5,154.5,210.2,324.3,373.7,339,236.9,194.5,134.7,132.5,100.3,130.8,107.3,113.5,126.2,153,128.5,84.4,54.8,81.2,108.6,116.6,124,108.5,134.2,94,72.4,80.3,112.3,182,211.9,195.3,205.2,173,155.1,79.6,31.4,60.8,55.4,89.4,87.9,139.5,126,186.6,185.3,189.5,158.2,126.2,184.2,163.1,174.1,142.6,120,96.7,78.8,102.7,117.1,105.3,77.3,39.9,65.4,66.4,85.3,57.8,48.5,23,9.2,35.3,61.7,78.9,44.9,28.5,23.1,25,16.3,0,0,0,0,16.8,131.1,125.2,120.4,57.6,33.9,29.7,24.1,16.7,7.6,7.6,7.8,6.6,6.5,15.4,14.7,31.6,42.1,42,34.5,50.2,49.4,38.2,5.1,9.3,9.2,9.2,0,7,21.4,25.5,27.9,19.1,23.4,13.9,8.3,14.5],"San Telmo":[53.4,47.6,48.8,49.8,57.6,56.9,57.6,51.1,51.9,58.5,92.5,85.4,97.3,73.3,84.5,96.1,92.6,89.2,61.1,108.2,99.9,132,89.4,97.7,89,93,99.2,100.7,100,68.1,43.5,46.1,62.7,65.7,60.5,43.1,44.3,68.4,78.3,65.2,51.7,45.8,90.8,99.1,113.3,126.3,156.7,150.7,116.5,87.7,99.9,109.1,109.6,132.8,148.2,147.8,122.5,116.6,111.2,149.2,138.5,108.9,94.6,79.6,155.7,182.4,160.3,143,142.1,142.4,141.2,128.5,156.8,161.5,159.8,140.7,151.3,147.7,173.3,157.5,121.9,67.3,60.1,50.5,38,17.9,28.2,40.7,29.8,32.3,32,40.9,44.4,38.8,51.6,52.2,58.8,51.8,51.1,73.3,59.6,58.6,20.3,12.7,31.4,29.7,41.7,46.3,66.8,87,90.5,112,122.8,136.7,169.8,168.8,161.8,146.8,155.9,168.7,135.3,124.7,168.2,197.6,192.9,149.2,154.6,154.4,142.1,111.5,97.1,117.6,147.5,173.9,176.4,171.6,176.2,186.1,182.2,167.7,163],"Agronomia":[41.9,45.7,35.4,15.5,17.6,40.9,61.6,57.8,38,14.5,6.5,5.7,15.7,26,49.4,76.3,68.1,50.9,32.9,29.1,36.6,31.2,31.1,20.8,38.7,48.5,54.6,27.6,22.4,16.8,17.7,13.9,4.4,13.4,19.4,33.8,23.7,23,8.7,9.1,0,10.4,25.8,46,40.8,41.2,20.8,21.9,16.3,25.1,22.6,12.8,16.8,24.4,31.5,19.1,13,6.2,28.5,28.6,32.6,9.8,10.9,7,25.8,28.6,28.2,13.7,7.1,6.6,12.1,24.3,25.1,25.8,19.4,12.3,11.7,10.7,22.3,22.8,17.2,5.7,7,12.3,25.2,22.7,17.8,19.2,19.9,26.6,12.1,10.6,10.7,10.9,12.7,6.8,6.9,13.1,14.2,15.6,9.6,11,26.9,17,19.2,11.2,13.4,11.2,15.7,32.2,69.1,63.5,56.6,29.3,30.9,26.5,20.9,28.9,24.7,19.3,34.7,42.2,61.6,67.1,78.4,67.7,44.9,36.8,55.1,54.6,67.6,50.2,47,24.1,19.3,18.7,18.8,25.6,28.9,36.5,33.6]},"obs":{"Palermo":[72.1,65.1,77.6,73,84.7,112.2,108,105.1,45,61.1,58.8,71.4,85.8,77.3,80.1,66.5,96.7,89.8,82.4,81.3,136.5,107.5,109.6,104.1,87.9,81.3,81.5,74.2,85.3,87.1,90.5,91.9,79,74.9,70.3,76.9,66.2,77.5,70.2,75.2,70.2,83.1,78.7,107.6,78.4,67.3,99.3,62.2,78.6,72.9,68.1,90.5,91.8,82,88.4,99.8,100,75.9,94.9,77.9,85.3,62.2,56.3,8.6,70.9,101.3,93.7,86.2,75.7,85.7,112.1,103,94.2,80.7,87.9,90.9,103.6,99.3,87,104.3,97.8,69.2,67.1,52.8,41,21.5,29.2,37.8,28.7,37.2,32.3,43,38.3,34.1,39.1,28.7,21,23.6,34.6,13.4,14.1,25.2,15,3.7,21.3,58.4,39.9,60.4,73.7,72.9,125.5,164.8,188.8,151.2,172.7,178.7,162.1,185.6,220.1,209,165.2,158.8,153.7,166.9,212.4,204.3,215.5,192.9,199.7,185.3,155.1,173.3,118.3,127.8,167.7,182.8,192.2,201.9,198,209.4,214.7],"Caballito":[52.8,51.3,69.2,62.4,57.6,71.5,66,48.6,39.4,37.6,36,35,25.4,33,43.5,48,54.2,54.1,39.4,66.1,43.5,53.3,62.8,42.2,47.2,38.8,36.9,43.6,48.9,58.3,52.2,39.7,39.3,27.2,25.8,32.1,27.4,36.6,46.3,37.7,46.3,34,30.6,38.9,38.5,58.2,67.1,25.5,44.2,30.8,39.8,56,47.3,35.9,50.1,45.3,59.3,56.6,53.1,49.8,49.7,47,29.7,5.5,23.5,32.1,25.3,20.4,27.2,40.8,32.3,37.1,43,32.4,34.5,38.1,49.2,33.5,35.8,42.9,57.3,51.1,41.4,40.2,29,34.4,27.7,35.9,22,28.7,25.7,27.6,23.3,27.2,39.2,24.8,22.1,17.3,13.4,15.6,15.5,16.9,6.8,4.7,9.3,17.3,19.8,17,66.5,72.5,80.8,105,92.6,75.4,86.8,77.9,63,90.9,81,86,72.5,92,92.7,103.5,82,105,106.8,102,106.3,95.3,121.9,92.6,85.5,92.5,103.5,117.2,132.6,143.9,119.2,117.7,109.7],"Puerto Madero":[10.9,4.7,4.6,16.1,32.8,39.5,42.5,25.9,15.2,5.4,20,11.6,16.3,4.9,10.4,13.9,8.6,18,17.3,17.7,9.3,7.4,23.6,11.5,15.7,9.8,8.2,26.3,32.6,19.7,15.3,10.1,13.5,4,7.9,7.7,10.6,3.1,8.7,12.1,8.7,3.3,3.7,3.3,8.5,8.1,4.1,7.9,5.5,7.4,2.9,1.5,8.8,6.8,12.4,13,5.2,12.5,7.9,1.5,2.5,1,6.4,0,2.9,5.3,9.8,2.4,13.7,10.8,4.4,8.7,6,12.7,7.1,8,7.5,4.2,4.5,4.9,8.6,7.5,2.6,2.8,0.9,6.6,2.8,3.8,1.9,1.4,0,0,5.4,3.9,3.1,0,1.3,1.8,0,0,0,0,0,0,1,10.5,5.3,3.3,1,1.2,3.4,0,0,1.5,0,0,1.3,0,1.8,1.3,3.7,4,1.1,2.2,7.8,1.2,0,0,2.3,0,0,0,1.7,3.5,1,2.3,1.3,2.1,0,0,3.6],"San Telmo":[2.5,4.6,4.1,2.6,6.6,4.7,3.7,5.6,2.9,3,8,3.7,6,4,7.1,7.3,4.1,6.4,1.8,13.1,5.3,8.9,4.6,6.8,7.8,4.9,9,7.4,4.4,2.6,1.7,4.5,6.3,2.7,2.6,3.1,3.1,7.4,5,0,5,3.6,8.2,6.8,6.5,9.8,11.4,3.2,4.2,6.3,6.4,5.2,6.4,8.7,7.7,6.1,5.4,6,5.1,10,5.6,1.9,7.9,0.9,7.4,8.9,4.5,6.6,8.7,5.4,7.4,6.5,9.7,7.7,7.8,6.9,9.2,8.1,11.8,7.4,2.2,2.4,6,0,0,2.8,1.6,2,0.9,1.9,1.8,2.7,2.3,0.9,4.9,2.3,1.7,2.9,1.7,3.6,0.7,0.8,0,0,1.8,0.8,3,3.6,4.5,6,6.4,9,9.7,7.9,14.9,9.1,7,12.9,11.3,11.6,6,9.1,20.2,12.7,9.8,11.4,15.3,11,8.4,7.8,7.6,13.4,15.1,14,14,14,15.1,16.4,13,11.6,15.3],"Agronomia":[4.7,2.5,1,0,3.1,6.9,6.1,2.8,0,0,1,0,1.9,3,5.1,6.5,2,1.7,3,1.1,3.3,2,1.2,1.1,6.1,3,2.9,0,1.8,1.8,0,0.9,0,1.9,1.9,2.9,0,1.7,0,0,0,2,2.8,3.9,1,2.6,0,0.9,1.7,1.3,0.8,0,1.9,1.8,1.1,0,0.9,0,3.3,0.7,0.8,0,0.9,0,1.7,0.9,1,0,0,1,0.9,1.8,1.1,0.9,1,0,0.8,0.9,2,1,0,0,1.2,0.8,2,0.8,0,2.2,0.8,1,0,0.7,0.9,0,1,0,0,1.7,0,0,1,0,1.1,0,0,1,0.8,0,1.8,3.4,7.7,1,2.8,1.9,1.2,2,0.8,2.9,1.2,0,6.2,2.8,3.9,7.6,5.9,1.9,2.8,4.3,6.3,2.7,7.5,2.1,1.9,1.9,0.9,1.8,1.9,2.6,2.6,3.7,1.9]},"bins":[0,27.13333333,67.5,154.4,622.4,1174.2,2898.3],"ramp":["#BBDF27","#4FC46A","#1E9C89","#2C718E","#414287","#46085C"]},"alq_zona":[{"d":"2016-01","norte":28.44500739,"centro":28.93228358,"sur":30.87750281,"caba":28.9583521,"caba_norte":23.79560063,"caba_centro":29.57102996,"caba_sur":36.28906323},{"d":"2016-04","norte":30.3893791,"centro":31.64002843,"sur":34.07473074,"caba":31.53821928,"caba_norte":26.03528319,"caba_centro":32.06037046,"caba_sur":39.70321704},{"d":"2016-07","norte":26.18366197,"centro":30.04981485,"sur":27.93779939,"caba":28.51283223,"caba_norte":22.31398388,"caba_centro":30.33410341,"caba_sur":34.33495428},{"d":"2016-10","norte":30.70900775,"centro":30.02994177,"sur":28.74647453,"caba":30.05835829,"caba_norte":26.1760674,"caba_centro":30.3637915,"caba_sur":35.35494942},{"d":"2017-01","norte":25.99911899,"centro":27.17756086,"sur":26.98107239,"caba":26.97333248,"caba_norte":22.26753526,"caba_centro":27.81563568,"caba_sur":32.39335337},{"d":"2017-04","norte":28.19084952,"centro":31.25893107,"sur":30.60642889,"caba":29.88208195,"caba_norte":24.39081158,"caba_centro":30.92991364,"caba_sur":36.27135159},{"d":"2017-07","norte":25.83102436,"centro":30.14004217,"sur":29.47211506,"caba":28.60566107,"caba_norte":22.48968185,"caba_centro":30.36172643,"caba_sur":34.46656162},{"d":"2017-10","norte":26.39219497,"centro":31.49832786,"sur":30.13161939,"caba":29.80908341,"caba_norte":23.27947466,"caba_centro":31.80300844,"caba_sur":35.86161851},{"d":"2018-01","norte":27.03730184,"centro":29.25663092,"sur":29.67837856,"caba":29.0204499,"caba_norte":23.99273051,"caba_centro":29.89503507,"caba_sur":35.09809431},{"d":"2018-04","norte":27.77813399,"centro":33.23599234,"sur":31.12963619,"caba":31.38515742,"caba_norte":24.67692854,"caba_centro":33.78925045,"caba_sur":36.2587346},{"d":"2018-07","norte":27.47821426,"centro":31.89323361,"sur":31.10643914,"caba":30.55622808,"caba_norte":24.26516941,"caba_centro":32.56746941,"caba_sur":35.90090766},{"d":"2018-10","norte":28.08455813,"centro":35.07446264,"sur":33.63063165,"caba":32.75251057,"caba_norte":24.76676342,"caba_centro":35.63858512,"caba_sur":39.70855075},{"d":"2019-01","norte":27.36022144,"centro":27.82813824,"sur":27.42669299,"caba":27.96657589,"caba_norte":24.06200854,"caba_centro":28.41817975,"caba_sur":33.03079702},{"d":"2019-04","norte":26.13086347,"centro":29.81930361,"sur":30.67370882,"caba":29.04157513,"caba_norte":22.90807377,"caba_centro":30.4014782,"caba_sur":36.55353982},{"d":"2019-07","norte":22.12981058,"centro":28.25625718,"sur":27.06341007,"caba":26.0811148,"caba_norte":19.2852728,"caba_centro":28.57493563,"caba_sur":32.48328491},{"d":"2019-10","norte":25.54215769,"centro":29.72318067,"sur":29.25089941,"caba":28.48610365,"caba_norte":22.40265747,"caba_centro":30.08825658,"caba_sur":34.95278431},{"d":"2020-01","norte":25.10054638,"centro":27.65958844,"sur":27.20502267,"caba":27.08333333,"caba_norte":21.782726,"caba_centro":28.43609008,"caba_sur":32.37591777},{"d":"2020-04","norte":31.5989336,"centro":36.37451115,"sur":35.79329239,"caba":34.93101405,"caba_norte":26.9804883,"caba_centro":36.82091433,"caba_sur":44.32450576},{"d":"2020-07","norte":33.90965792,"centro":36.1763554,"sur":33.67926121,"caba":34.99823784,"caba_norte":29.6123083,"caba_centro":36.04456697,"caba_sur":40.60926055},{"d":"2020-10","norte":35.45962,"centro":36.69850847,"sur":39.9774642,"caba":36.71710078,"caba_norte":31.63819615,"caba_centro":36.63494951,"caba_sur":45.67310885},{"d":"2021-01","norte":33.76752313,"centro":36.78135047,"sur":40.11697396,"caba":36.50861362,"caba_norte":30.31277245,"caba_centro":37.20904308,"caba_sur":45.35424083},{"d":"2021-04","norte":37.16509478,"centro":38.82431411,"sur":44.7765262,"caba":39.50837045,"caba_norte":32.86949088,"caba_centro":39.78129696,"caba_sur":50.97055909},{"d":"2021-07","norte":31.07184443,"centro":37.11775438,"sur":37.60633191,"caba":35.53015022,"caba_norte":27.85206106,"caba_centro":37.62728645,"caba_sur":43.38394248},{"d":"2021-10","norte":33.23417755,"centro":37.14423507,"sur":39.30807626,"caba":36.5238105,"caba_norte":30.02069849,"caba_centro":37.6457502,"caba_sur":44.8365655},{"d":"2022-01","norte":30.99155758,"centro":35.24821244,"sur":34.57133619,"caba":33.26160247,"caba_norte":26.67018735,"caba_centro":35.26528298,"caba_sur":39.11939749},{"d":"2022-04","norte":35.8915047,"centro":37.69141067,"sur":39.38720186,"caba":36.91201122,"caba_norte":30.096518,"caba_centro":38.1953161,"caba_sur":45.36505701},{"d":"2022-07","norte":34.33613851,"centro":36.67517665,"sur":35.8406963,"caba":36.23955405,"caba_norte":29.89215041,"caba_centro":37.91315322,"caba_sur":42.30952705},{"d":"2022-10","norte":39.55950985,"centro":39.73331315,"sur":41.40701251,"caba":40.39246777,"caba_norte":34.48140961,"caba_centro":40.75461229,"caba_sur":49.81180699},{"d":"2023-01","norte":40.03414282,"centro":36.9595224,"sur":38.14066013,"caba":38.00361563,"caba_norte":33.95916476,"caba_centro":37.65494523,"caba_sur":46.01729056},{"d":"2023-04","norte":47.72625963,"centro":43.66915047,"sur":46.14145484,"caba":44.79203182,"caba_norte":39.65450995,"caba_centro":44.62150856,"caba_sur":53.86582255},{"d":"2023-07","norte":44.76795745,"centro":47.55115487,"sur":38.11549017,"caba":43.27560554,"caba_norte":36.12384032,"caba_centro":45.50896254,"caba_sur":48.61733405},{"d":"2023-10","norte":59.02824129,"centro":58.53876924,"sur":57.35187772,"caba":51.44454679,"caba_norte":41.55234514,"caba_centro":52.90255567,"caba_sur":64.35807947},{"d":"2024-01","norte":47.50861434,"centro":49.22005699,"sur":49.19854631,"caba":49.19154974,"caba_norte":40.81929742,"caba_centro":50.41473213,"caba_sur":59.54552152},{"d":"2024-04","norte":36.08388945,"centro":39.99139607,"sur":42.71525077,"caba":39.88423591,"caba_norte":32.26254096,"caba_centro":40.94194674,"caba_sur":49.97081933},{"d":"2024-07","norte":31.97760915,"centro":33.18040179,"sur":37.65613834,"caba":34.03385354,"caba_norte":29.02798665,"caba_centro":33.92694344,"caba_sur":42.40731757},{"d":"2024-10","norte":34.09977046,"centro":34.01569771,"sur":37.32472079,"caba":34.98522698,"caba_norte":31.19224115,"caba_centro":34.59490342,"caba_sur":41.69521183},{"d":"2025-01","norte":29.40815998,"centro":30.19315866,"sur":33.26931958,"caba":30.75218882,"caba_norte":27.06457913,"caba_centro":30.60362434,"caba_sur":36.5829932},{"d":"2025-04","norte":29.27545452,"centro":31.21798467,"sur":35.52250743,"caba":31.56786646,"caba_norte":27.06120421,"caba_centro":31.52812475,"caba_sur":38.80149637},{"d":"2025-07","norte":24.70712013,"centro":28.29544717,"sur":32.65260711,"caba":28.2530361,"caba_norte":22.95051963,"caba_centro":28.61962654,"caba_sur":35.8670494},{"d":"2025-10","norte":25.7326519,"centro":29.62345167,"sur":32.74288025,"caba":29.32851737,"caba_norte":23.75754828,"caba_centro":30.08267372,"caba_sur":35.97857497},{"d":"2026-01","norte":27.77450068,"centro":30.95304045,"sur":31.41891691,"caba":30.50934192,"caba_norte":25.36472366,"caba_centro":31.57607569,"caba_sur":35.06816769},{"d":"2026-04","norte":31.48156948,"centro":32.55226865,"sur":34.14903759,"caba":32.92250011,"caba_norte":28.74646829,"caba_centro":33.19910299,"caba_sur":37.99823129}],"mensual":[{"d":"2015-12","v":1009815.7041731},{"d":"2016-01","v":991046.29226665},{"d":"2016-02","v":988456.31792037},{"d":"2016-03","v":981630.21530175},{"d":"2016-04","v":950286.82303477},{"d":"2016-05","v":931117.14067732},{"d":"2016-06","v":921821.49559026},{"d":"2016-07","v":925113.8080812},{"d":"2016-08","v":948649.28731166},{"d":"2016-09","v":950199.47158709},{"d":"2016-10","v":937872.68822632},{"d":"2016-11","v":930616.72284999},{"d":"2016-12","v":935318.32157201},{"d":"2017-01","v":943604.86916091},{"d":"2017-02","v":951736.69639413},{"d":"2017-03","v":948196.32032677},{"d":"2017-04","v":945874.34701903},{"d":"2017-05","v":946925.00146509},{"d":"2017-06","v":952964.61969628},{"d":"2017-07","v":955059.32636563},{"d":"2017-08","v":961429.06323885},{"d":"2017-09","v":975948.01152526},{"d":"2017-10","v":984424.11877628},{"d":"2017-11","v":996126.45439542},{"d":"2017-12","v":987620.30048198},{"d":"2018-01","v":984672.57596217},{"d":"2018-02","v":988691.47782029},{"d":"2018-03","v":1004584.87865541},{"d":"2018-04","v":1000409.67957153},{"d":"2018-05","v":1000522.1779538},{"d":"2018-06","v":990553.41838633},{"d":"2018-07","v":991062.36895474},{"d":"2018-08","v":978886.50552285},{"d":"2018-09","v":950362.14363919},{"d":"2018-10","v":932020.49153955},{"d":"2018-11","v":927844.48968114},{"d":"2018-12","v":916268.13030343},{"d":"2019-01","v":898692.42989378},{"d":"2019-02","v":896825.27822064},{"d":"2019-03","v":886065.66587531},{"d":"2019-04","v":872642.98886987},{"d":"2019-05","v":865259.81049539},{"d":"2019-06","v":860756.65088926},{"d":"2019-07","v":856635.29679259},{"d":"2019-08","v":845682.31592231},{"d":"2019-09","v":830871.68691646},{"d":"2019-10","v":832213.64462286},{"d":"2019-11","v":817889.20726851},{"d":"2019-12","v":808697.23358641},{"d":"2020-01","v":810921.15049569},{"d":"2020-02","v":825438.94647636},{"d":"2020-03","v":830475.81504324},{"d":"2020-04","v":831363.54219142},{"d":"2020-05","v":846379.11917769},{"d":"2020-06","v":865985.36725937},{"d":"2020-07","v":919306.19030324},{"d":"2020-08","v":955739.70313019},{"d":"2020-09","v":993012.97090567},{"d":"2020-10","v":1009059.96338201},{"d":"2020-11","v":1009399.1292936},{"d":"2020-12","v":1001497.12535102},{"d":"2021-01","v":999363.72673155},{"d":"2021-02","v":1019501.90788471},{"d":"2021-03","v":1029237.1199991},{"d":"2021-04","v":1022955.51854866},{"d":"2021-05","v":1025692.012442},{"d":"2021-06","v":1037065.25617777},{"d":"2021-07","v":1037003.69446319},{"d":"2021-08","v":1034652.58681515},{"d":"2021-09","v":1029283.62060839},{"d":"2021-10","v":1022234.38172267},{"d":"2021-11","v":1030174.67890609},{"d":"2021-12","v":1025767.48956706},{"d":"2022-01","v":1023709.91758239},{"d":"2022-02","v":1028232.4909402},{"d":"2022-03","v":1020195.26520717},{"d":"2022-04","v":1030413.1822306},{"d":"2022-05","v":1035635.03651277},{"d":"2022-06","v":1055805.07116788},{"d":"2022-07","v":1058118.63898305},{"d":"2022-08","v":1065965.70146379},{"d":"2022-09","v":1072892.87449857},{"d":"2022-10","v":1054821.77706882},{"d":"2022-11","v":1054124.51952118},{"d":"2022-12","v":1051290.61565588},{"d":"2023-01","v":1046898.83486871},{"d":"2023-02","v":1072656.65549983},{"d":"2023-03","v":1084955.87638963},{"d":"2023-04","v":1108191.38937172},{"d":"2023-05","v":1141381.29780999},{"d":"2023-06","v":1184160.17064886},{"d":"2023-07","v":1228210.12510058},{"d":"2023-08","v":1250832.59908492},{"d":"2023-09","v":1268532.95180228},{"d":"2023-10","v":1313308.59861215},{"d":"2023-11","v":1296273.22883797},{"d":"2023-12","v":1269442.45941056},{"d":"2024-01","v":1262048.59503716},{"d":"2024-02","v":1138025.070652},{"d":"2024-03","v":1018328.00335823},{"d":"2024-04","v":944939.35057515},{"d":"2024-05","v":925831.38096279},{"d":"2024-06","v":902975.33517956},{"d":"2024-07","v":887472.59389218},{"d":"2024-08","v":890587.58970976},{"d":"2024-09","v":894219.02910554},{"d":"2024-10","v":896006.12711146},{"d":"2024-11","v":890696.42456663},{"d":"2024-12","v":881419.54201155},{"d":"2025-01","v":878759.48631303},{"d":"2025-02","v":892649.74032871},{"d":"2025-03","v":891956.62240775},{"d":"2025-04","v":896847.24010561},{"d":"2025-05","v":908683.69075042},{"d":"2025-06","v":910232.34996231},{"d":"2025-07","v":906083.69623938},{"d":"2025-08","v":910379.12082139},{"d":"2025-09","v":911118.93932436},{"d":"2025-10","v":912821.48836454},{"d":"2025-11","v":910637.24310204},{"d":"2025-12","v":903653.13307359},{"d":"2026-01","v":900658.16634519},{"d":"2026-02","v":908868.43586216},{"d":"2026-03","v":909044.47118775},{"d":"2026-04","v":908273.62942133},{"d":"2026-05","v":904815.53666225},{"d":"2026-06","v":900839.70590535},{"d":"2026-07","v":888965.9150466},{"d":"2026-08","v":887042.54177386},{"d":"2026-09","v":882455.24913305}],"trimestral":[{"d":"2015-10","precio":null,"itf":3376468.44812017,"ing_ind":2053967.14552186},{"d":"2016-01","precio":986933.27694927,"itf":3408112.70450452,"ing_ind":1979443.89354949},{"d":"2016-04","precio":934017.55276752,"itf":2961541.81816885,"ing_ind":1849381.4026267},{"d":"2016-07","precio":941319.32721385,"itf":3301388.36948777,"ing_ind":1863409.54604415},{"d":"2016-10","precio":934584.32988735,"itf":3109232.78276227,"ing_ind":1895571.22683719},{"d":"2017-01","precio":947879.05859775,"itf":3514134.04099656,"ing_ind":2008705.40378185},{"d":"2017-04","precio":948626.38870436,"itf":3174565.91665469,"ing_ind":1946812.57485669},{"d":"2017-07","precio":964256.2419086,"itf":3370858.09489861,"ing_ind":1905735.305586},{"d":"2017-10","precio":989391.47563184,"itf":3319093.92156889,"ing_ind":1993577.39538025},{"d":"2018-01","precio":992801.832242,"itf":3421042.18167226,"ing_ind":1937078.89601185},{"d":"2018-04","precio":997057.08226532,"itf":3176842.70002837,"ing_ind":1956786.89687262},{"d":"2018-07","precio":972773.06219402,"itf":3183550.86108838,"ing_ind":1817162.48570001},{"d":"2018-10","precio":925245.11300222,"itf":2824959.36043188,"ing_ind":1720190.68091873},{"d":"2019-01","precio":893705.4426986,"itf":3195619.82158483,"ing_ind":1810581.51769695},{"d":"2019-04","precio":866104.20709509,"itf":2982290.74423777,"ing_ind":1807790.40908304},{"d":"2019-07","precio":844037.95601915,"itf":3236203.52323254,"ing_ind":1840366.32735651},{"d":"2019-10","precio":819311.13425358,"itf":2876178.30860157,"ing_ind":1745562.47705126},{"d":"2020-01","precio":822421.88060534,"itf":3036634.63608127,"ing_ind":1743428.04390365},{"d":"2020-04","precio":848046.95949823,"itf":2427776.52620393,"ing_ind":1585865.02488333},{"d":"2020-07","precio":956584.21169662,"itf":2733235.35890273,"ing_ind":1600262.68118297},{"d":"2020-10","precio":1006563.97206685,"itf":2741403.7348874,"ing_ind":1695872.4368698},{"d":"2021-01","precio":1016358.16268919,"itf":2783885.94355141,"ing_ind":1645922.89265695},{"d":"2021-04","precio":1028727.06572159,"itf":2603820.54237725,"ing_ind":1633765.97201785},{"d":"2021-07","precio":1033565.82966563,"itf":2908982.43709563,"ing_ind":1682572.97665526},{"d":"2021-10","precio":1026086.19691504,"itf":2809362.39358902,"ing_ind":1750916.57962038},{"d":"2022-01","precio":1023975.57487424,"itf":3078551.53964238,"ing_ind":1825955.60595891},{"d":"2022-04","precio":1041054.84908906,"itf":2820368.80354228,"ing_ind":1755201.0088932},{"d":"2022-07","precio":1065941.90880555,"itf":2941377.00324908,"ing_ind":1718966.17671127},{"d":"2022-10","precio":1053345.97700092,"itf":2607778.21982521,"ing_ind":1602439.91385005},{"d":"2023-01","precio":1068965.4412523,"itf":2812799.31823204,"ing_ind":1636464.79922652},{"d":"2023-04","precio":1146370.91288128,"itf":2559318.84847488,"ing_ind":1564073.4878042},{"d":"2023-07","precio":1250633.75689099,"itf":2889927.80382419,"ing_ind":1633949.7286069},{"d":"2023-10","precio":1290711.58360128,"itf":2508937.61183353,"ing_ind":1544936.79717336},{"d":"2024-01","precio":1129098.47151676,"itf":2295309.81964918,"ing_ind":1336218.67516602},{"d":"2024-04","precio":923951.35980768,"itf":2316582.82704537,"ing_ind":1426700.70798836},{"d":"2024-07","precio":890849.96236155,"itf":2617540.68321144,"ing_ind":1478903.13581262},{"d":"2024-10","precio":889218.03134571,"itf":2541695.76126443,"ing_ind":1568105.11553817},{"d":"2025-01","precio":887892.83801056,"itf":2887250.86626058,"ing_ind":1694093.38839688},{"d":"2025-04","precio":905333.24188412,"itf":2867894.93030232,"ing_ind":1796236.83987788},{"d":"2025-07","precio":909224.23270098,"itf":3218146.99608698,"ing_ind":1886543.61050077},{"d":"2025-10","precio":908959.82974546,"itf":3099235.52633784,"ing_ind":1927383.52964024},{"d":"2026-01","precio":906265.43869841,"itf":2970452.26668649,"ing_ind":1755847.85240654},{"d":"2026-04","precio":904594.94869797,"itf":2747649.61878733,"ing_ind":1710909.34157933},{"d":"2026-07","precio":886116.33333333,"itf":null,"ing_ind":null}],"hitos":[{"d":"2015-08-01","id":"A","txt":"Unificación del Código Civil y Comercial (Ley 26.994): plazo mínimo legal de 2 años y prohibición de indexación formal."},{"d":"2015-12-16","id":"B","txt":"Salida del Cepo Cambiario"},{"d":"2020-03-29","id":"C","txt":"DNU 320/2020: congelamiento temporal del valor de alquileres y suspensión de desalojos por emergencia de COVID-19."},{"d":"2020-07-01","id":"D","txt":"Sanción de la Ley Nacional de Alquileres (Ley 27.551): extensión a 3 años de plazo mínimo, ajuste anual obligatorio por ICL y registro AFIP."},{"d":"2023-10-18","id":"E","txt":"Reforma mediante Ley 27.737: mantenimiento de 3 años, ajustes semestrales y adopción del coeficiente Casa Propia (vigencia breve)."},{"d":"2023-12-29","id":"F","txt":"DNU 70/2023: derogación de leyes de alquileres, desregulación de plazos, libre acuerdo de índices y legalización de contratos en moneda extranjera."}],"ref_trim":"3T 2026"};
+</script>
+<script>
+"use strict";
+const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const NS = 'http://www.w3.org/2000/svg';
+const el = (n, a, p) => { const e = document.createElementNS(NS, n); for (const k in a || {}) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+const div = (c, txt) => { const e = document.createElement('div'); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
+const T = d => Date.UTC(+d.slice(0,4), +d.slice(5,7)-1, d.length > 7 ? +d.slice(8,10) : 1);
+const fmtMes = t => { const d = new Date(t); return MES[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); };
+const fmtDia = t => { const d = new Date(t); return d.getUTCDate() + ' ' + MES[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); };
+const fmtTrim = t => { const d = new Date(t); return (Math.floor(d.getUTCMonth()/3)+1) + 'T ' + d.getUTCFullYear(); };
+const nf = new Intl.NumberFormat('es-AR', {maximumFractionDigits:0});
+const pesos = v => '$ ' + nf.format(v);
+const pct = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toLocaleString('es-AR', {maximumFractionDigits:0}) + '%';
+
+const M = DATA.mensual.map(r => ({t:T(r.d), v:r.v}));
+const Q = DATA.trimestral.map(r => ({t:T(r.d), precio:r.precio, itf:r.itf, ing_ind:r.ing_ind}));
+const HITOS = DATA.hitos.map(h => ({...h, t:T(h.d)}));
+document.querySelectorAll('.ref').forEach(e => e.textContent = DATA.ref_trim);
+
+// ---- periodos regulatorios (fechas de los hitos) -----------------------------------
+// tone: 0 sin sombra, 1 gris, 2 gris claro, 3 gris oscuro (sub-ventana sobre otro periodo: aparte = no genera tarjeta)
+const hT = id => HITOS.find(h => h.id === id).t;
+const PERIODOS = [
+  {txt:'Tras la salida del cepo',     t0:hT('B'), t1:hT('C'), tone:0},
+  {txt:'DNU 320: congelamiento',      t0:hT('C'), t1:hT('D'), tone:1},
+  {txt:'Ley de Alquileres (27.551)',  t0:hT('D'), t1:hT('F'), tone:1},
+  {txt:'Desregulación (DNU 70/2023)', t0:hT('F'), t1:Infinity, tone:2},
+  {txt:'Reforma 27.737',              t0:hT('E'), t1:hT('F'), tone:3, aparte:true}
+];
+
+// ---- grafico de lineas con periodos sombreados y tooltip ---------------------
+const W = 1000, P = {l:78, r:130, t:34, b:30}, BARS_H = 120;   // BARS_H: alto del panel de variacion mensual
+function chart(host, cfg) {   // cfg: series [{name,c,dash,pts:[{t,v}]}], bandas [{a,b,txt}] (hito inicial, hito final, rotulo), anota (bool), bars [{t,v}] (var. % mensual), yFmt
+  host.textContent = '';
+  const H = cfg.bars ? 400 + BARS_H : 400, yb = H - P.b - (cfg.bars ? BARS_H : 0);   // yb: base del grafico principal
+  const all = cfg.series.flatMap(s => s.pts);
+  const t0 = Math.min(...all.map(p => p.t)), t1 = Math.max(...all.map(p => p.t));
+  let lo = Math.min(...all.map(p => p.v)), hi = Math.max(...all.map(p => p.v));
+  const step = niceStep((hi - lo) / 5); lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  if (cfg.bandas) lo -= step;   // franja libre abajo para los rotulos de las ventanas
+  if (cfg.yZero) lo = 0;
+  const x = t => P.l + (t - t0) / (t1 - t0) * (W - P.l - P.r), y = v => yb - (v - lo) / (hi - lo) * (yb - P.t);
+  const svg = el('svg', {viewBox:`0 0 ${W} ${H}`, role:'img', 'aria-label':cfg.aria, tabindex:0}, host);
+  for (let v = lo; v <= hi + 1e-9; v += step) {
+    el('line', {x1:P.l, x2:W-P.r, y1:y(v), y2:y(v), stroke:'var(--grid)'}, svg);
+    const tx = el('text', {x:P.l-8, y:y(v)+4, 'text-anchor':'end', 'font-size':11.5, fill:'var(--muted)'}, svg); tx.textContent = cfg.yFmt(v);
+  }
+  for (let yr = new Date(t0).getUTCFullYear() + 1; yr <= new Date(t1).getUTCFullYear(); yr++) {
+    const t = Date.UTC(yr, 0, 1); if (t < t0) continue;
+    el('line', {x1:x(t), x2:x(t), y1:H-P.b, y2:H-P.b+4, stroke:'var(--axis)'}, svg);
+    const tx = el('text', {x:x(t), y:H-P.b+17, 'text-anchor':'middle', 'font-size':11.5, fill:'var(--muted)'}, svg); tx.textContent = yr;
+  }
+  (cfg.bandas || []).forEach(bd => {   // periodo gris con su nombre adentro (o arriba si es angosto), como la pandemia en el grafico de referencia
+    const ta = Math.max(bd.t0, t0), tb = Math.min(bd.t1, t1); if (tb <= ta) return;
+    const xa = x(ta), w = x(tb) - xa;
+    if (bd.tone) el('rect', {x:xa, y:P.t, width:w, height:yb - P.t, fill:`var(--band${bd.tone})`, stroke:'var(--surface)', 'stroke-width':1.5}, svg);
+    const arriba = w < 125, tx = el('text', {x:xa + w / 2, y: arriba ? P.t - 9 : yb - 9, 'text-anchor':'middle', 'font-size':11, 'font-weight':600, 'letter-spacing':'.03em',
+      fill:'var(--ink2)', stroke:'var(--surface)', 'stroke-width':3, 'paint-order':'stroke'}, svg);
+    tx.textContent = bd.txt.toUpperCase();
+  });
+  cfg.series.forEach(s => {
+    const d = s.pts.map((p, i) => (i ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1)).join('');
+    const pa = el('path', {d, fill:'none', 'stroke-width':2.5, 'stroke-linejoin':'round', 'stroke-linecap':'round'}, svg);
+    pa.style.stroke = `var(${s.c})`; if (s.dash) pa.style.strokeDasharray = s.dash;
+  });
+  const ends = cfg.series.map(s => ({s, p:s.pts[s.pts.length-1]})).map(e => ({...e, ly:y(e.p.v)})).sort((a, b) => a.ly - b.ly);
+  for (let i = 1; i < ends.length; i++) if (ends[i].ly - ends[i-1].ly < 16) ends[i].ly = ends[i-1].ly + 16;
+  ends.forEach(e => {
+    const c = el('circle', {cx:x(e.p.t), cy:y(e.p.v), r:4, 'stroke-width':2, stroke:'var(--surface)'}, svg); c.style.fill = `var(${e.s.c})`;
+    const tx = el('text', {x:x(e.p.t)+9, y:e.ly+4, 'font-size':11.5, fill:'var(--ink2)'}, svg); tx.textContent = e.s.short + ' ' + cfg.yFmt(e.p.v);
+  });
+  if (cfg.anota) {   // valores clave: inicio, maximo y minimo
+    const pts = cfg.series[0].pts, mx = pts.reduce((a, b) => b.v > a.v ? b : a), mn = pts.reduce((a, b) => b.v < a.v ? b : a);
+    [...new Map([pts[0], mx, mn].map(p => [p.t, p])).values()].forEach(p => {
+      const arriba = p !== mn, tx = el('text', {x:x(p.t), y:y(p.v) + (arriba ? -10 : 18), 'text-anchor': p === pts[0] ? 'start' : 'middle', 'font-size':12.5, 'font-weight':600, fill:'var(--ink)',
+        stroke:'var(--surface)', 'stroke-width':3, 'paint-order':'stroke'}, svg);
+      tx.textContent = cfg.yFmt(p.v, true) + ' · ' + fmtMes(p.t); });
+  }
+  const barV = new Map();
+  if (cfg.bars) {   // variacion % mensual (real), barras bajo el grafico, como en la referencia
+    const top = yb + 26, bot = H - P.b, mid = (top + bot) / 2, m = Math.max(...cfg.bars.map(b => Math.abs(b.v)));
+    const bt = el('text', {x:P.l, y:yb + 16, 'font-size':11.5, 'font-weight':600, fill:'var(--s2)'}, svg); bt.textContent = 'Variación mensual del alquiler (%, en pesos constantes)';
+    el('line', {x1:P.l, x2:W-P.r, y1:mid, y2:mid, stroke:'var(--axis)'}, svg);
+    const bw = Math.max((W - P.l - P.r) / cfg.bars.length * .7, 1.5);
+    cfg.bars.forEach(b => { barV.set(b.t, b.v); const h = Math.abs(b.v) / m * (mid - top - 14);
+      const r = el('rect', {x:x(b.t) - bw / 2, y: b.v >= 0 ? mid - h : mid, width:bw, height:Math.max(h, .5), fill:'var(--s2)', opacity:.55}, svg); });
+    const ext = [cfg.bars.reduce((a, b) => b.v > a.v ? b : a), cfg.bars.reduce((a, b) => b.v < a.v ? b : a), cfg.bars[cfg.bars.length - 1]];
+    [...new Map(ext.map(b => [b.t, b])).values()].forEach(b => { const h = Math.abs(b.v) / m * (mid - top - 14);
+      const tx = el('text', {x:Math.min(x(b.t), W - P.r - 14), y: b.v >= 0 ? mid - h - 4 : mid + h + 12, 'text-anchor':'middle', 'font-size':11, fill:'var(--ink2)'}, svg);
+      tx.textContent = pct(b.v).replace('%', '').replace('+', '') + '%'; });
+  }
+  // cursor + tooltip de valores
+  const ts = [...new Set(all.map(p => p.t))].sort((a, b) => a - b);
+  const vl = el('line', {y1:P.t, y2:H - P.b, stroke:'var(--muted)', visibility:'hidden'}, svg);
+  const dots = cfg.series.map(s => { const c = el('circle', {r:4.5, 'stroke-width':2, stroke:'var(--surface)', visibility:'hidden'}, svg); c.style.fill = `var(${s.c})`; return c; });
+  const tip = div('tip'); tip.style.display = 'none'; host.appendChild(tip);
+  const ov = el('rect', {x:P.l, y:P.t, width:W-P.l-P.r, height:H-P.t-P.b, fill:'transparent'}, svg);
+  const hide = () => { vl.setAttribute('visibility', 'hidden'); dots.forEach(d => d.setAttribute('visibility', 'hidden')); tip.style.display = 'none'; };
+  ov.addEventListener('pointermove', ev => {
+    const r = svg.getBoundingClientRect(), k = W / r.width, tt = t0 + ((ev.clientX - r.left) * k - P.l) / (W - P.l - P.r) * (t1 - t0);
+    const t = ts.reduce((a, b) => Math.abs(b - tt) < Math.abs(a - tt) ? b : a);
+    vl.setAttribute('x1', x(t)); vl.setAttribute('x2', x(t)); vl.setAttribute('visibility', 'visible');
+    tip.textContent = ''; tip.appendChild(div('th', cfg.tLbl(t)));
+    cfg.series.forEach((s, i) => {
+      const p = s.pts.find(q => q.t === t);
+      if (p) { dots[i].setAttribute('cx', x(t)); dots[i].setAttribute('cy', y(p.v)); dots[i].setAttribute('visibility', 'visible'); }
+      else dots[i].setAttribute('visibility', 'hidden');
+      const tr = div('tr'); tr.appendChild(div('', s.short)); const b = document.createElement('b'); b.textContent = p ? cfg.yFmt(p.v, true) : '—'; tr.appendChild(b); tip.appendChild(tr);
+    });
+    if (barV.has(t)) { const tr = div('tr'); tr.appendChild(div('', 'Var. mensual')); const b = document.createElement('b'); b.textContent = pct(barV.get(t)); tr.appendChild(b); tip.appendChild(tr); }
+    tip.style.display = 'block';
+    const w = tip.offsetWidth, left = x(t) / k + 14;
+    tip.style.left = (left + w > r.width ? left - w - 28 : left) + 'px'; tip.style.top = '10px';
+  });
+  ov.addEventListener('pointerleave', hide);
+}
+function niceStep(raw) { const e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e; }
+
+// ---- grafico 1: precio mensual + tramos entre hitos -------------------------
+const yPesos = (v, full) => full ? pesos(v) : '$ ' + nf.format(Math.round(v / 1000)) + ' mil';
+chart(document.getElementById('p1'), {
+  series:[{name:'Alquiler 2 amb', short:'Alquiler', c:'--s1', pts:M}], anota:true, bars:M.slice(1).map((r, i) => ({t:r.t, v:(r.v / M[i].v - 1) * 100})),
+  bandas:PERIODOS, yFmt:yPesos, tLbl:fmtMes,
+  aria:'Evolución mensual del alquiler de un 2 ambientes en pesos constantes, con los períodos regulatorios sombreados y la variación mensual debajo'
+});
+// variacion real dentro de cada periodo
+(function tramos() {
+  const tEnd = M[M.length-1].t, cont = document.getElementById('periodos');
+  const mes = t => { const d = new Date(t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1); };
+  const val = new Map(M.map(r => [r.t, r.v]));
+  PERIODOS.filter(p => !p.aparte).forEach(p => {
+    const a = Math.max(mes(p.t0), M[0].t), b = p.t1 === Infinity ? tEnd : Math.min(mes(p.t1), tEnd), va = val.get(a), vb = val.get(b); if (va == null || vb == null) return;
+    const ch = (vb / va - 1) * 100, c = div('per');
+    c.appendChild(div('pt', p.txt)); c.appendChild(div('pv ' + (ch > 0 ? 'up' : 'down'), pct(ch)));
+    c.appendChild(div('pd', fmtMes(a) + ' → ' + fmtMes(b))); c.appendChild(div('pd', pesos(va) + ' → ' + pesos(vb)));
+    cont.appendChild(c);
+  });
+})();
+document.getElementById('hitos-ol').append(...HITOS.map(h => { const li = document.createElement('li');
+  const l = div('ltr', h.id); const d = div(''); const b = document.createElement('b'); b.textContent = fmtDia(h.t) + '. '; d.append(b, h.txt); li.append(l, d); return li; }));
+
+// ---- grafico 2: precio vs ingresos (trimestral) ------------------------------
+const SER = [
+  {k:'precio',  name:'Alquiler de un 2 ambientes (Zonaprop)', short:'Alquiler',                c:'--s1', dash:''},
+  {k:'ing_ind', name:'Ingreso individual medio de perceptores', short:'Ingreso individual',      c:'--s2', dash:'7 4'},
+  {k:'itf',     name:'Ingreso total familiar (ITF) medio',      short:'Ingreso familiar (ITF)',  c:'--s3', dash:'2 4'}
+];
+const leg = document.getElementById('leg2');
+SER.forEach(s => { const sp = document.createElement('span'); const sv = el('svg', {viewBox:'0 0 26 6'}, sp);
+  const l = el('line', {x1:0, x2:26, y1:3, y2:3, 'stroke-width':3}, sv); l.style.stroke = `var(${s.c})`; if (s.dash) l.style.strokeDasharray = s.dash;
+  sp.append(s.name); leg.appendChild(sp); });
+const yMill = (v, full) => full ? pesos(v) : '$ ' + (v / 1e6).toLocaleString('es-AR', {maximumFractionDigits:2}) + ' M';
+(function draw2() {
+  const series = SER.map(s => ({...s, pts:Q.filter(r => r[s.k] != null).map(r => ({t:r.t, v:r[s.k]}))}));
+  chart(document.getElementById('p2'), {series, yFmt:yMill, tLbl:fmtTrim, yZero:true, bandas:PERIODOS,
+    aria:'Evolución trimestral del alquiler, el ingreso individual y el ingreso total familiar, en pesos constantes'});
+  const ult = Q.filter(r => r.itf != null).pop();
+  document.getElementById('nota2').textContent = 'Los ingresos llegan hasta el ' + fmtTrim(ult.t) + '; el precio, hasta el ' + fmtTrim(Q[Q.length-1].t) + '.';
+})();
+
+// ---- grafico 3: alquiler como % del ITF, por zona ----------------------------
+const Z = DATA.alq_zona.map(r => ({...r, t:T(r.d)}));
+const ZSER = [   // lineas plenas; la distincion es por color (Okabe-Ito)
+  {k:'norte',  short:'Norte',  name:'Zona Norte',  c:'--s1', dash:''},
+  {k:'centro', short:'Centro', name:'Zona Centro', c:'--s2', dash:''},
+  {k:'sur',    short:'Sur',    name:'Zona Sur',    c:'--s3', dash:''}
+];
+const leg3 = document.getElementById('leg3');
+ZSER.forEach(s => { const sp = document.createElement('span'); const sv = el('svg', {viewBox:'0 0 26 6'}, sp);
+  const l = el('line', {x1:0, x2:26, y1:3, y2:3, 'stroke-width':3}, sv); l.style.stroke = `var(${s.c})`; if (s.dash) l.style.strokeDasharray = s.dash;
+  sp.append(s.name); leg3.appendChild(sp); });
+const pc1 = (v, full) => v.toLocaleString('es-AR', {maximumFractionDigits: full ? 1 : 0}) + '%';
+function draw3() {
+  const zona = document.querySelector('#f-precio [aria-pressed=true]').dataset.v === 'zona';
+  const key = s => zona ? s.k : 'caba_' + s.k;   // "toda CABA": precio de CABA sobre el ITF de cada zona
+  const series = ZSER.map(s => ({...s, pts:Z.filter(r => r[key(s)] != null).map(r => ({t:r.t, v:r[key(s)]}))})).filter(s => s.pts.length);
+  chart(document.getElementById('p3'), {series, bandas:PERIODOS, yFmt:pc1, tLbl:fmtTrim, aria:'Alquiler de un 2 ambientes como porcentaje del ingreso total familiar, por zona'});
+  document.getElementById('nota3').textContent = zona
+    ? 'Precio de cada zona: promedio de sus barrios ponderado por m² ofertados de 2 ambientes (IDECBA), solo si los barrios con precio cubren al menos el 50 % de los m². Zona de cada barrio según barrio_zona.csv.'
+    : 'Precio de toda CABA contra el ITF de cada zona: cambia solo el ITF, así que por zona la lectura es aproximada.';
+}
+document.getElementById('f-precio').addEventListener('click', ev => { const b = ev.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#f-precio button').forEach(x => x.setAttribute('aria-pressed', x === b)); draw3(); });
+draw3();
+
+// ---- slide 5: mapa de calor de avisos estimados (5 barrios) ---------------------
+(function heat() {
+  const D = DATA.calor, ts = D.months.map(T), tProy = T(D.proy_desde), host = document.getElementById('p4');
+  const nom = k => k === 'Agronomia' ? 'Agronomía' : k;
+  const GRIS = '#f4f4f1', nf1 = new Intl.NumberFormat('es-AR', {maximumFractionDigits:1});
+  const colorOf = v => { if (v == null) return '#d9d9d6'; if (v === 0) return GRIS;
+    let j = D.bins.length - 2; while (j > 0 && v < D.bins[j]) j--; return D.ramp[Math.min(j, D.ramp.length - 1)]; };
+  const Wh = 1000, Ph = {l:118, r:12, t:30, b:30}, rowH = 50, nR = D.orden.length, nC = ts.length, Hh = Ph.t + Ph.b + nR * rowH, cw = (Wh - Ph.l - Ph.r) / nC;
+  const svg = el('svg', {viewBox:`0 0 ${Wh} ${Hh}`, role:'img', 'aria-label':'Mapa de calor de avisos estimados por barrio y mes'}, host);
+  D.orden.forEach((k, r) => {
+    const yy = Ph.t + r * rowH, lab = el('text', {x:Ph.l - 10, y:yy + rowH / 2 + 4, 'text-anchor':'end', 'font-size':13, 'font-weight':600, fill:'var(--ink)'}, svg); lab.textContent = nom(k);
+    D.vals[k].forEach((v, c) => el('rect', {x:Ph.l + c * cw, y:yy, width:cw + .35, height:rowH - 2, fill:colorOf(v), 'shape-rendering':'crispEdges'}, svg));
+  });
+  ts.forEach((t, c) => { const d = new Date(t);
+    if (d.getUTCMonth() === 0) { const tx = el('text', {x:Ph.l + (c + .5) * cw, y:Hh - 10, 'text-anchor':'middle', 'font-size':11.5, fill:'var(--muted)'}, svg); tx.textContent = d.getUTCFullYear(); } });
+  const cp = ts.findIndex(t => t >= tProy);
+  if (cp > 0) {   // inicio de la proyeccion
+    const xp = Ph.l + cp * cw;
+    el('line', {x1:xp, x2:xp, y1:Ph.t - 6, y2:Hh - Ph.b + 2, stroke:'var(--ink)', 'stroke-width':1.3, 'stroke-dasharray':'3 3'}, svg);
+    const tx = el('text', {x:xp + 6, y:Ph.t - 10, 'font-size':12, fill:'var(--ink2)'}, svg); tx.textContent = 'Proyectado →';
+  }
+  const tip = div('tip'); tip.style.display = 'none'; host.appendChild(tip);
+  const mark = el('rect', {width:cw + .35, height:rowH - 2, fill:'none', stroke:'var(--ink)', 'stroke-width':1.8, visibility:'hidden'}, svg);
+  const ov = el('rect', {x:Ph.l, y:Ph.t, width:Wh - Ph.l - Ph.r, height:nR * rowH, fill:'transparent'}, svg);
+  ov.addEventListener('pointermove', ev => {
+    const rc = svg.getBoundingClientRect(), k = Wh / rc.width, px = (ev.clientX - rc.left) * k, py = (ev.clientY - rc.top) * k;
+    const c = Math.floor((px - Ph.l) / cw), r = Math.floor((py - Ph.t) / rowH);
+    if (c < 0 || c >= nC || r < 0 || r >= nR) { tip.style.display = 'none'; mark.setAttribute('visibility', 'hidden'); return; }
+    const key = D.orden[r], v = D.vals[key][c], o = D.obs[key][c], t = ts[c];
+    mark.setAttribute('x', Ph.l + c * cw); mark.setAttribute('y', Ph.t + r * rowH); mark.setAttribute('visibility', 'visible');
+    tip.textContent = ''; tip.appendChild(div('th', nom(key) + ' · ' + fmtMes(t) + (t >= tProy ? ' · proyectado' : '')));
+    [['Avisos estimados', v == null ? 'sin dato' : nf1.format(v)], ['Muestra IDECBA (m² ÷ 43)', o == null ? '—' : nf1.format(o) + ' deptos']].forEach(([a, b]) => {
+      const tr = div('tr'); tr.appendChild(div('', a)); const bb = document.createElement('b'); bb.textContent = b; tr.appendChild(bb); tip.appendChild(tr); });
+    tip.style.display = 'block'; const sc = host.clientWidth / Wh, tw = tip.offsetWidth, left = px * sc + 14;
+    tip.style.left = (left + tw > host.clientWidth ? px * sc - tw - 14 : left) + 'px'; tip.style.top = (py * sc + 12) + 'px';
+  });
+  ov.addEventListener('pointerleave', () => { tip.style.display = 'none'; mark.setAttribute('visibility', 'hidden'); });
+  const lab = v => v < 10 ? nf1.format(v) : nf1.format(Math.round(v));
+  const leg = document.getElementById('leg4');
+  [{t:'0 avisos', c:GRIS}, ...D.ramp.map((c, j) => ({t:lab(D.bins[j]) + ' a ' + lab(D.bins[j + 1]), c}))].forEach(x => {
+    const sp = document.createElement('span'), sw = document.createElement('i'); sw.style.cssText = `display:inline-block;width:16px;height:12px;border:1px solid var(--border);border-radius:3px;background:${x.c}`;
+    sp.append(sw, x.t); leg.appendChild(sp); });
+  document.getElementById('nota4').textContent = 'Los 6 tramos de color son cuantiles de los avisos de estos cinco barrios, así que los colores no son comparables con el mapa de los 48 barrios. Desde ' + fmtMes(tProy) + ' el total de avisos es una proyección.';
+})();
+
+// ---- navegacion de slides ----------------------------------------------------
+(function deck() {
+  const sl = [...document.querySelectorAll('.slide')], dots = document.getElementById('dots');
+  const prev = document.getElementById('prev'), next = document.getElementById('next'), cnt = document.getElementById('count');
+  let cur = 0;
+  sl.forEach((_, i) => { const b = document.createElement('button'); b.setAttribute('aria-label', 'Ir al slide ' + (i + 1)); b.addEventListener('click', () => go(i)); dots.appendChild(b); });
+  function go(i) {
+    cur = Math.max(0, Math.min(sl.length - 1, i));
+    sl.forEach((e, k) => e.classList.toggle('active', k === cur));
+    [...dots.children].forEach((b, k) => b.setAttribute('aria-current', k === cur));
+    prev.disabled = cur === 0; next.disabled = cur === sl.length - 1; cnt.textContent = (cur + 1) + ' / ' + sl.length;
+    sl[cur].querySelectorAll('iframe[data-src]').forEach(f => { if (!f.getAttribute('src')) f.src = f.dataset.src; });   // los mapas cargan al llegar
+    sl[cur].scrollTop = 0; history.replaceState(null, '', '#' + (cur + 1));
+  }
+  prev.addEventListener('click', () => go(cur - 1)); next.addEventListener('click', () => go(cur + 1));
+  document.addEventListener('keydown', e => {
+    if (e.target.closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
+    if (['ArrowRight', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); go(cur + 1); }
+    else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); go(cur - 1); }
+    else if (e.key === 'Home') go(0); else if (e.key === 'End') go(sl.length - 1); });
+  go((parseInt(location.hash.slice(1), 10) || 1) - 1);
+})();
+</script>
+</body>
+</html>
